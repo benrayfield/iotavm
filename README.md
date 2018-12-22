@@ -4,6 +4,8 @@
 
 I'm still in the formal-verification steps of the software, in which I recently derived lisp's cons car and cdr similar to in unlambda, and after some more of that kind of stuff, up to deriving AVL treemap, I'll put in optimizations for int32, int64, opencl, music tools that fit in a constant memory size, etc. Here's some output from SlowVM.java, which is slow cuz of its use of java.util.Map and deduping everything and is not nearly as fast as it will be with bit masks and other optimizations...
 
+FIXME got car and revcar mixed up some places, and same for cdr and revcdr, in the comments, but the code works as seen in the testcases...
+
 
 This is (TODO incomplete) a formal-verification of the logic I plan to optimize in iotavm andOr binufnode (some middle ground between them using ``curry where nsForkEdit is sometimes one of the curried params to forkEdit recursively).
 
