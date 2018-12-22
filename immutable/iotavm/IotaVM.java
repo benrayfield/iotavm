@@ -8,6 +8,8 @@ and most longs are self contained small datastructs instead of pointing to the h
 */
 public interface IotaVM{
 	
+	//TODO use Funcall (which contains a long) instead of long?
+	
 	//A binary forest where every leaf is one of IotaFunc.
 	
 	public long leaf(Leaf f);

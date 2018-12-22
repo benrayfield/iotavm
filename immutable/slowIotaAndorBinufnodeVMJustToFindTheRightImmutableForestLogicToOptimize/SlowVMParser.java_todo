@@ -1,0 +1,1027 @@
+/** C# Life3d/OccamsJson ported to Java by Ben F Rayfield then modified, both opensource MIT license */
+package immutable.slowIotaAndorBinufnodeVMJustToFindTheRightImmutableForestLogicToOptimize;
+import static mutable.util.Lg.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NavigableMap;
+import java.util.Set;
+import java.util.Stack;
+import java.util.TreeMap;
+import java.util.WeakHashMap;
+import java.util.function.Function;
+
+import immutable.util.Text;
+
+/** TODO This was UfnodeParser but is being modified for SlowVM then will port to IotaVM andOr binufnode.
+<br><br>
+OLD...
+<br><br>
+TODO this code starts as a copy of occamsjsonds
+and I gradually rewrite it to be ufnode language.
+<br><br>
+TODO...
+Syntax display as first that fits:
+. means [] aka () aka {} aka nil.
+? like in [? "sparseSize]#size is how you import the sparseSize func named as size.
+-3.45e-7
+"text is in range 2^52 to 2^53-1 including 20 bits of unicode and 32 bits of colorARGB, but only quote it if they are all same color or maybe all the standard color else have some syntax to say the color of the whole string else display as list of such numbers"
+(...) //linkedlist with nil at end, like [a [b [c [d []]]]]. Remember every binacyc path leads to [] aka nil.
+<...> //similar to linkedlist but reversed, like [[[a b] c] d].
+[...] //list, like [a b c d] aka {0:a, 1:b, 2:3:d}
+{...} //map, like {a:y, b:x, c:y, d:z}
+*/
+public class SlowVMParser{
+	
+	//TODO This was UfnodeParser but is being modified for SlowVM then will port to IotaVM andOr binufnode.
+	
+	//static{lgErr("FIXME norm multiline string literals by number of tabs before first \"");}
+	
+	//static{lgErr("FIXME Do all AVL rotations by some variation of log(size) instead of height, so can lazyEval internal ufnode.ty.Branch structures (parts of maplists) instead of having to put the whole maplist (which may be huge) in a single code string. Ufnode code strings will use '...' for inlining constant ufnodes and [? ...] for importing funcs that are not derived from existing funcs (such as the first s and k and other core ops).");}
+
+	//TODO this returns Function<ob,String> names and ob. Or keep the names in the ob?
+	public static Parsed ufnodeParse(String uflang){
+		String[] tokens = tokenize(uflang);
+		return parseTokens(tokens);
+	}
+	
+	public static String toUfnodeLangWholeForestNoHashnames(Map mapOrList, boolean allowLog){
+		return toUfnodeLangWholeForestNoHashnames(mapOrList, new Ns(), allowLog);
+	}
+
+	public static String toUfnodeLangWholeForestNoHashnames(Map mapOrList, Ns ns, boolean allowLog){
+		StringBuilder sb = new StringBuilder();
+		
+		//FIXME Should slow globalHash be required before this func (especially cuz its called "nohashnames" but could rename that)?
+		//hashGlobal prevents error: Caller should have triggered (or proven it was ever triggered
+		//before containing ob was garbcoled) lazyEval of globalHash(cx) before calling funcs with
+		//interfaces that have no cx params such as equals, hashCode, and compareTo
+		//DO THIS IF INCLUDE MAP, BUT FOR NOW I'M JUST REMOVING THE MAP FROM THE TESTCASE:
+		//mapOrList.meta().hashGlobal(c); //
+		
+		toUfnodeLang(sb, mapOrList, 0, ns.fork(), new HashSet(), countEachObIn(mapOrList,allowLog), allowLog);
+		//return "<TODO add syntacticSugar of linked list syntax like in ufnodeHumanReadableProgLang like <SCC Get <KC 1>>#cdr AND ADD ufnodeDefineCustomLanguageInStringLitsThan(java:)ThatGeneratesJavaCodeAndGuaranteesCxMemComPilLimitsCountedAndObeyedAndStillWorksWithJavaCodeInDebugger CUZ ITS THE EASIEST WAY TO SANDBOX THE JAVA LAMBDA CODES AND MAKE SURE THEY OBEY CX.MEM COM LAG ETSO START WRITING IN THAT LANG INSTEAD OF JAVA AND JUST TRANSLATE IT TO JAVA, AND MAKE IT INCLUDE JAVAS SAME OPERATORS AND BASIC SYNTAX BUT EXCLUDE MOST FUNC CALLS ETC>"+Text.n
+		//	+sb.toString().trim(); //TODO optimize by not having to trim()
+		return sb.toString().trim();
+	}
+	
+	public static final String n = "\r\n";
+
+	//public static final NullObject nullObject = new NullObject();
+	//protected static final class NullObject{};
+
+	/*public static Object parseNumber(String jsonNumber){
+		if (jsonNumber.contains(".")) return Double.parseDouble(jsonNumber);
+		return Long.parseLong(jsonNumber);
+	}*/
+	
+	public static double parseNumber(String jsonNumber){
+		return Double.parseDouble(jsonNumber);
+	}
+
+	/** After each range of tokens is consumed, *intPtr[0] is the index right after it.
+	String literal, number, booleaneans, and null are single token. Brackets recurse.
+	Unsafe part is int pointer. Its target value is added to during recursive parsing.
+	TODO change that to int[] size 1? It would remove the need for unsafe keyword.
+	*/
+	public static Parsed parseTokens(String[] tokens){
+		Ns names = new Ns();
+		Map o = parseTokens(tokens, new int[]{0}, names);
+		return new Parsed(names, o);
+	}
+	
+	public static final Map nil = SlowVM.nil;
+	
+	static Map stackToLinkedlist(Stack<Map> stack){
+		Map building = nil;
+		while(!stack.isEmpty()){
+			Map o = stack.pop();
+			building = SlowVM.pair(o, building);
+		}
+		return building;
+	}
+
+	static Map parseTokens(String[] tokens, int intPtr[], Ns names){
+		//TODO namespace is only 1 name per ob, but this fits into boltzNamespace which allows multiple names per ob
+		String firstToken = tokens[intPtr[0]];
+		//lg("firstToken: "+firstToken);
+		intPtr[0]++;
+		char firstChar = firstToken.charAt(0);
+		String name;
+		if(firstChar == '{'){
+			
+			//TODO merge duplicate code
+			
+			//NavigableMap map = new TreeMap(mapKeyComparator);
+			Map map = nil;
+			boolean closed = false; //TODO merge duplicate code between { and [
+			while(intPtr[0] < tokens.length){
+				String token = tokens[intPtr[0]];
+				intPtr[0]++;
+				lg("Token in MAP: "+token);
+				if(closed){
+					lg("CLOSING MAP. token="+token+" map="+map);
+					//FIXME what if its the last token and theres nothing after it to parse?
+					//All obs are immutable: map = Collections.unmodifiableNavigableMap(map);
+					if(token.startsWith("#")){
+						name = token.substring(1);
+						names.putBidirectionally(name, map);
+						//lg("Put name="+name+" val="+map+" namespace="+namespace);
+						lg("Put name="+name+" val="+map);
+					}else{
+						intPtr[0]--; //not a name, dont parse it here.
+					}
+					return map;
+				}else{
+					if(token.equals("}")){
+						//TODO merge duplicate code
+						closed = true;
+						if(intPtr[0] == tokens.length){ //this is one of the times theres no name
+							lg("Last token, returning without name: "+map);
+							//All obs are immutable: return Collections.unmodifiableNavigableMap(map);
+							return map;
+						}
+					}else{
+						intPtr[0]--;  //parse starting with what could have been ]
+						Map key = parseTokens(tokens, intPtr, names);
+						String nextToken = tokens[intPtr[0]];
+						intPtr[0]++;
+						if(!nextToken.equals(":")) throw new Error("Expected colon after key but got "+nextToken);
+						Map value = parseTokens(tokens, intPtr, names);
+						//map.put(key, value);
+						
+						throw new Error("Theres no syntax for map cuz that must be derived from iotas.");
+						/*map = map.put(key, value);
+						lg("Map update: "+map);
+						if(intPtr[0] == tokens.length) throw new Error("Unclosed dictionary/map at end");
+						nextToken = tokens[intPtr[0]];
+						intPtr[0]++;
+						if(nextToken.equals("}")){
+							//TODO merge duplicate code
+							closed = true;
+							if(intPtr[0] == tokens.length){ //this is one of the times theres no name
+								lg("Last token, returning without name: "+map);
+								//already immutable: return Collections.unmodifiableNavigableMap(map);
+								return map;
+							}
+						}
+						//FIXME TODO if(nextToken.startsWith("#")) handleName.run();
+						//then it must be comma
+						//if(!nextToken.equals(",")) throw new RuntimeException(
+						//	"Expected comma at token index "+intPtr[0]);
+						//intPtr[0]--; //dont skip comma
+						*/
+					}
+				}
+			}
+			throw new Error("Unclosed dictionary/map at end");
+		}else if(firstChar == '[' || firstChar == '<' || firstChar == '('){
+			String endCharStr = ")";
+			if(firstChar == '[') endCharStr = "]";
+			else if(firstChar == '<') endCharStr = ">";
+			
+			//TODO merge duplicate code
+			
+			//TODO return double[] if all are numbers
+			//List<Object> list = new ArrayList();
+			
+			
+			Map building = null;
+			Stack<Map> stackForLinkedlist = firstChar=='(' ? new Stack() : null;
+			
+			
+			//boolean allHaveBeenDoubles = true;
+			//boolean allDoublesFitInFloats = true;
+			boolean closed = false; //TODO merge duplicate code between { and [
+			while(intPtr[0] < tokens.length){
+				String token = tokens[intPtr[0]];
+				lg("Token in LIST: "+token);
+				intPtr[0]++;
+				//FIXME TODO if(intPtr[0] == tokens.length) //this is one of the times theres no name
+				if(closed){
+					lg("CLOSING LIST. token="+token);
+					//FIXME what if its the last token and theres nothing after it to parse?
+					//already immutable: list = Collections.unmodifiableList(list);
+					if(stackForLinkedlist != null){
+						building = stackToLinkedlist(stackForLinkedlist);
+					}
+					if(token.startsWith("#")){
+						name = token.substring(1);
+						names.putBidirectionally(name, building);
+						//lg("Put name="+name+" val="+list+" namespace="+namespace);
+						lg("Put name="+name+" val="+building);
+					}else{
+						intPtr[0]--; //not a name, dont parse it here.
+					}
+					return building;
+				}else{
+					if(token.equals("]")){
+						/*if(!list.isEmpty() && allHaveBeenDoubles){
+							//return listToArrayOfDoubles_todoOptimizeByNotCreatingList(list);
+							if(allDoublesFitInFloats){
+								return listOfDoublesToArrayOfFloats_todoOptimizeByNotCreatingList(list);
+							}
+						}*/
+						//FIXME TODO if(nextToken.startsWith("#")) handleName.run();
+						closed = true; //FIXME merge duplicate code
+						if(intPtr[0] == tokens.length){ //this is one of the times theres no name
+							lg("Last token, returning without name: "+building);
+							//already immutable: return Collections.unmodifiableList(list);
+							return building;
+						}
+						//return Collections.unmodifiableList(list);
+					}else{
+						intPtr[0]--;  //parse starting with what could have been ]
+						Map o = parseTokens(tokens, intPtr, names);
+						/*COMMENTINGOUT THIS CUZ token could be "aName" as in .3#aName instead of ".3",
+			 			AND THE CODE IS A PAIN TO WRITE, TAKES FEW MINS... LATER
+						if(o instanceof Double){
+							if(!token.equalsIgnoreCase(""+Float.parseFloat(token))){
+								allDoublesFitInFloats = false;
+							}
+						}else{
+							allHaveBeenDoubles = false;
+						}*/
+						//list.add(o);
+						
+						//TODO what func (name it what?) in ob should add 1 item at end instead of concat its contents?
+						if(firstChar == '['){ //list
+							if(building == null) building = nil;
+							building = building.put(c.wrap(building.size()), o); //add at end of denselist
+						}else if(firstChar == '<'){ //currylist
+							if(building==null){
+								building = o;
+							}else{
+								building = SlowVM.pair(building, o);
+							}
+						}else if(firstChar == '('){ //linkedlist
+							stackForLinkedlist.push(o);
+						}else{
+							throw new Error("firstChar:"+firstChar);
+						}
+						lg("List update: "+(building==null?stackForLinkedlist:building));
+						
+						if(intPtr[0] == tokens.length) throw new Error("Unclosed list at end");
+						String nextToken = tokens[intPtr[0]];
+						intPtr[0]++;
+						if(nextToken.equals(endCharStr)){ //] > )
+							/*if(allHaveBeenDoubles){
+								//return listToArrayOfDoubles_todoOptimizeByNotCreatingList(list);
+								if(allDoublesFitInFloats){
+									return listOfDoublesToArrayOfFloats_todoOptimizeByNotCreatingList(list);
+								}
+							}*/
+							closed = true; //FIXME merge duplicate code
+							if(intPtr[0] == tokens.length){ //this is one of the times theres no name
+								lg("Last token, returning without name: "+building);
+								//already immutable: return Collections.unmodifiableList(list);
+								return building;
+							}
+							//return Collections.unmodifiableList(list);
+						}/*else if(nextToken.startsWith("#")){
+							//handleName.accept(nextToken.substring(1));
+							throw new Error("FIXME why did I write this else if condition here?");
+						}*/else{ //then it must be comma
+							//UPDATE: Dont require comma in list, but I'm undecided if should do : and , in map.
+							//if(!nextToken.equals(",")) throw new RuntimeException(
+							//	"Expected comma at token index "+intPtr[0]+" firstToken="+firstToken+" nextToken="+nextToken);
+							intPtr[0]--; //dont skip next thing in list, since there are no commas, unless its ]
+						}
+					}
+				}
+			}
+			throw new Error("Unclosed list at end. firstToken="+firstToken);
+		}else if(".".equals(firstToken)){
+			return nil; //aka Const.zero but those are different java types (Nil vs Scalar) which need merging
+		}else if(firstChar == '"' || firstChar == '-' || firstChar == '.' || Character.isDigit(firstChar)){
+			Map ret;
+			if(firstChar == '"'){
+				ret = SlowVM.wrap(unescape(firstToken));
+				//FIXME TODO if(nextToken.startsWith("#")) handleName.run();
+			}else{ //firstChar == '-' || firstChar == '.' || Character.isDigit(firstChar)
+				ret = SlowVM.wrap(parseNumber(firstToken));
+				//FIXME TODO if(nextToken.startsWith("#")) handleName.run();
+			}
+			if(intPtr[0] < tokens.length){ //there may be a name after it
+				String token = tokens[intPtr[0]++];
+				if(token.startsWith("#")){
+					name = token.substring(1);
+					names.putBidirectionally(name, ret);
+					lg("Name of string or number: "+name+" val="+ret);
+					lgErr("WARNING MAYBE ERROR: Java may dedup Double or String even if constructor is called twice: "+ret);
+				}else{
+					intPtr[0]--;
+				}
+			}
+			return ret;
+		/*}else if(firstChar == '"'){
+			return unescape(firstToken);
+			//FIXME TODO if(nextToken.startsWith("#")) handleName.run();
+		}else if(firstChar == '-' || firstChar == '.' || Character.isDigit(firstChar)){
+			return parseNumber(firstToken);
+			//FIXME TODO if(nextToken.startsWith("#")) handleName.run();
+		*/
+		}else if(names.so.containsKey(firstToken)){
+			Map val = names.so.get(firstToken).get();
+			lg("Pointer name="+firstToken+" to "+val);
+			return val;
+			
+		//}else if(firstChar == 't' && "true".equals(firstToken)){
+		//	return true;
+		//}else if(firstChar == 'f' && "false".equals(firstToken)){
+		//	return false;
+		//}else if(firstChar == 'n' && "null".equals(firstToken)){
+		//	return nullObject;
+		/*}else if(firstChar == '#'){
+			String name = firstToken.substring(1);
+			if(name.length() == 0) throw new Error("Empty name");
+			lg("Got name: "+name);
+		*/
+		//}else if("?".equals(firstToken)){
+		//	return Const.importFunc;
+		}
+		throw new Error("First token (in a recursion, intPtr="+intPtr[0]
+			+") must be { or [ or quote or - or digit or # (for name) or ? (the only built-in funfor importing funcs),"
+			+" but its length is "+firstToken.length()+" and String is "+firstToken);
+	}
+
+	public static String[] tokenize(String json){
+		List<String> tokens = new ArrayList();
+		String[] bigTokens = tokenizeStringLiterals(json);
+		for(int i=0; i<bigTokens.length; i++){
+			if(bigTokens[i].charAt(0) == '"'){
+				tokens.add(bigTokens[i]);
+				//lg("BIGTOKEN: "+bigTokens[i]);
+			}else{
+				String[] smallTokens = tokenizeBetweenStringLiterals(bigTokens[i]);
+				//lg("S BIGTOKEN: "+bigTokens[i]);
+				//lg("S SMALLTOKENS: "+Arrays.asList(smallTokens));
+				for(int s=0; s<smallTokens.length; s++){
+					tokens.add(smallTokens[s]);
+				}
+			}
+		}
+		for(String t : tokens) lg("* "+t);
+		return tokens.toArray(new String[0]);
+	}
+
+	public static String escape(String s){
+		StringBuilder sb = new StringBuilder();
+		sb.append('"');
+		for(int i=0; i<s.length(); i++){
+			char c = s.charAt(i);
+			switch(c){
+				case '\t': sb.append("\\t"); break;
+				case '\r': sb.append("\\r"); break;
+				case '\n': sb.append("\\n"); break;
+				case '\\': sb.append("\\\\"); break;
+				case '\"': sb.append("\\\""); break;
+				default: sb.append(c); break;
+			}
+		}
+		sb.append('"');
+		return sb.toString();
+	}
+
+	/** TODO add cx param and pay to it */
+	public static String unescape(String quote){
+		if(quote.charAt(0) != '"') throw new RuntimeException("Does not start with quote: "+quote);
+		boolean backslash = false;
+		StringBuilder sb = new StringBuilder();
+		for(int i=1; i<quote.length(); i++){
+			char ch = quote.charAt(i);
+			if(backslash){
+				switch(ch){
+				case 't': sb.append('\t'); break;
+				case 'r': sb.append('\r'); break;
+				case 'n': sb.append('\n'); break;
+				case '\\': sb.append('\\'); break;
+				case '"': sb.append('"'); break;
+				//case '\r': case '\n':
+				//	throw new Exception("Unclosed String literal before line end. quote["+quote+"]");
+				//break;
+				default:
+					//TODO do we want error if unrecognized escape code?
+					//sb.append('\\').append(c);
+					sb.append(ch);
+				break;
+				}
+				backslash = false;
+			}else{ // !backslash
+				switch(ch){
+				case '"':
+					if(i != quote.length()-1) throw new RuntimeException("String literal ended early at char index "+i
+						+" of "+quote.length()+" in StringLiteral["+quote+"]");
+					return sb.toString();
+				case '\\':
+					backslash = true;
+				break;
+				default:
+					sb.append(ch);
+				break;
+				}
+			}
+		}
+		throw new RuntimeException("String literal did not end ["+quote+"]");
+	}
+
+	/** Returns String literals (including quotes and escape codes) and whats between them.
+	Whats between them has multiple tokens per token returned here, to be further parsed.
+	*/
+	public static String[] tokenizeStringLiterals(String json){
+		char[] chars = json.toCharArray();
+		boolean inStrLiteral = false;
+		boolean backslash = false;
+		List<String> tokens = new ArrayList();
+		StringBuilder sb = new StringBuilder();
+		for(int i = 0; i < json.length(); i++){
+			char h = chars[i];
+			//Start.log("Parsing char: "+c);
+			if(inStrLiteral){
+				if(backslash){
+					switch(h){
+					case 't': sb.append("\\t"); break;
+					case 'r': sb.append("\\r"); break;
+					case 'n': sb.append("\\n"); break;
+					case '\\': sb.append("\\\\"); break;
+					case '"': sb.append("\\\""); break;
+					//case '\r': case '\n':
+					//	if(inStrLiteral) throw new Exception("Unclosed String literal before line end");
+					//break;
+					default:
+						//TODO do we want error if unrecognized escape code?
+						//sb.append('\\').append(c);
+						sb.append(h);
+					break;
+					}
+					backslash = false;
+				}else{ //inStrLiteral && !backslash
+					switch(h){
+					case '"':
+						sb.append('"');
+						String token = sb.toString();
+						//Start.log("Parsed token: "+token);
+						//Start.log(n+"=== Parsed token inStrLiteral: "+token+" ==="+n);
+						tokens.add(token);
+						sb.setLength(0); //was sb.Clear() in c#
+						//inStrLiteral = backslash = inOtherLiteral = false;
+						inStrLiteral = backslash = false;
+						//Also at end check for unclosed String literal
+					break;
+					case '\\':
+						backslash = true;
+					break;
+					default:
+						sb.append(h);
+					break;
+					}
+				}
+			}else{ // !inStringLiteral
+				if(h=='"'){
+					if(sb.length() != 0){
+						String token = sb.toString();
+						//Start.log(n+"=== Parsed token !inStrLiteral: "+token+" ==="+n);
+						tokens.add(token);
+						sb.setLength(0); //was sb.Clear() in c#
+						//inStrLiteral = backslash = inOtherLiteral = false;
+						inStrLiteral = backslash = false;
+					}
+					if(h == '"'){
+						sb.append('"');
+						inStrLiteral = true;
+					}
+				}else{
+					sb.append(h);
+				}
+			}
+		}
+		if(inStrLiteral) throw new RuntimeException("Unclosed String literal");
+		//Get last nonStringLiteral token which ends here.
+		if(sb.length() != 0){
+			String token = sb.toString();
+			//Start.log("Parsed token: "+token);
+			//Start.log(n+"=== Parsed token at end: "+token+" ==="+n);
+			tokens.add(token);
+		}
+		return tokens.toArray(new String[0]);
+	}
+
+
+
+	/** Tokenize 1 of the Strings returned by tokenizeStringLiterals, those that arent String literals.
+	Each will become 1 or more tokens.
+	*/
+	public static String[] tokenizeBetweenStringLiterals(String json){
+		//Start.log("START tokenizeBetweenStringLiterals: "+json);
+		char[] chars = json.toCharArray();
+		List<String> tokens = new ArrayList();
+		StringBuilder sb = new StringBuilder();
+		boolean prevOneCharToken = false;
+		int len = json.length();
+		for(int i = 0; i<len; i++){
+			char h = chars[i];
+			boolean whitespace = Character.isWhitespace(h);
+			//Start.log("Parsing char: "+h);
+			boolean oneCharTokenNow = h==',' || h==':' || h == '{' || h == '}' || h == '[' || h == ']'
+				|| h == '<' || h == '>' || h == '(' || h == ')';
+			if(prevOneCharToken || whitespace || oneCharTokenNow || h=='#'){
+				//Examples of 2 tokens each: 3.45#aName ["abc" 5 6]#aName The #aName is a separate token.
+				if(sb.length() != 0){
+					String token = sb.toString();
+					//Start.log(n+"=== Parsed token: "+token+" ==="+n);
+					tokens.add(token);
+					//lg("\r\nTOKEN: "+token+"\r\n");
+					sb.setLength(0); //was sb.Clear() in c#
+				}
+			}
+			if(!whitespace) sb.append(h);
+			prevOneCharToken = oneCharTokenNow; //for if next token starts after a comma etc
+		}
+		//Get last token which ends here
+		if(sb.length() != 0){
+			String token = sb.toString();
+			//Start.log(n+"=== Parsed token at end: "+token+" ==="+n);
+			tokens.add(token);
+		}
+		//Start.log("END tokenizeBetweenStringLiterals: "+json);
+		return tokens.toArray(new String[0]);
+	}
+	
+	public static final Class listType = List.class; //TODO use isAssignableFrom instead of ==
+
+	public static final Class mapType = NavigableMap.class; //TODO use isAssignableFrom instead of ==
+
+	public static final Class StringType = String.class;
+
+	public static final Class scalarType = Double.class; //TODO primitive or object wrapper?
+
+	//public static final Class longType = Long.class; //TODO primitive or object wrapper?
+	
+	/*protected static enum Ty{
+		tyScalar,
+		tyLong,
+		tyString,
+		tyDoubleArray,
+		tyLongArray,
+		tyMap,
+		tyList,
+		tyNull
+	};
+
+	public static Ty typeToIntForComparator(Class c){
+		if(c == scalarType) return Ty.tyScalar;
+		if(c == longType) return Ty.tyLong;
+		if(c == StringType) return Ty.tyString;
+		if(c == double[].class) return Ty.tyDoubleArray; //TODO optimization instead of List<Double>
+		if(c == long[].class) return Ty.tyLongArray; //TODO optimization instead of List<Long>
+		if(mapType.isAssignableFrom(c)) return Ty.tyMap;
+		if(listType.isAssignableFrom(c)) return Ty.tyList;
+		if(c == NullObject.class) return Ty.tyNull;
+	}*/
+	
+	/** Doubles first, then Strings.
+	TODO optimize. double[] (TODO float[] and multi dim array of those, since rbm weights are float[][][])
+	is allowed as value but not key. Keys can only be Double or String.
+	*/
+	public static final Comparator mapKeyComparator = new Comparator(){
+		public int compare(Object x, Object y){
+			if(x instanceof Double){
+				if(y instanceof Double){
+					if((Double)x < (Double)y) return -1;
+					if((Double)x > (Double)y) return 1;
+					return 0;
+				}else{ //y instanceof String
+					return -1; //TODO is this backward?
+				}
+			}else{ //x instanceof String
+				if(y instanceof Double){
+					return 1; //TODO is this backward?
+				}else{ //y instanceof String
+					return ((String)x).compareTo((String)y);
+				}
+			}
+			/*Ty xt = typeToIntForComparator(x.getClass());
+			Ty yt = typeToIntForComparator(y.getClass());
+			if(xt != yt) return xt.ordinal()-yt.ordinal(); //TODO is this backward?
+			switch(xt){
+			case tyScalar: case tyLong: case tyString:
+				return ((Comparable)x).compareTo(y);
+			case tyDoubleArray:
+			case tyLongArray:
+			case tyMap:
+			case tyList:
+			
+			if(c == double[].class) return 3; //TODO optimization instead of List<Double>
+			if(c == long[].class) return 4; //TODO optimization instead of List<Long>
+			if(mapType.isAssignableFrom(c)) return 5;
+			if(listType.isAssignableFrom(c)) return 6;
+			if(c == NullObject.class) return 7;
+			*/
+		}
+	};
+	
+	//TODO optimize
+	public static String doubleToString(double d){
+		//scientific notation using "e" instead of "E", for compatibility with javascript
+		String s = Double.toString(d).toLowerCase();
+		if(s.endsWith(".0")) s = s.substring(0, s.length()-2); //TODO use DecimalFormat
+		//if(!s.contains(".")) s += ".0";
+		return s;
+	}
+	
+	public static Map<Map,Integer> countEachObIn(Map root, boolean allowLog){
+		//FIXME optimize it could get very slow using Map as key unless its an IdentityHashMap.
+		Map<Map,Integer> counts = new WeakHashMap<Map,Integer>();
+		countEachObIn(root,counts,allowLog);
+		return counts;
+	}
+	
+	static void countEachObIn(Map o, Map<Map,Integer> counts, boolean allowLog){
+		if(counts.containsKey(o)) counts.put(o, counts.get(o)+1);
+		else counts.put(o, 1);
+		if(allowLog) lg("countEachObIn "+o);
+		for(int i=0; i<SlowVM.depends(o); i++){
+			Map child = SlowVM.depend(o,i);
+			if(counts.get(o)==1){
+				countEachObIn(child, counts, allowLog);
+			}
+		}
+	}
+	
+	static boolean isLeafSoSmallDontNameIt(Map o){
+		return false;
+		//return o.depends()==0 && o.size()==0;
+	}
+	
+	/** TODO verify this is what it does: Syntax display as first that fits:
+	. means [] aka () aka {} aka "" aka nil.
+	? like in [? "sparseSize]#size is how you import the sparseSize func named as size.
+	-3.45e-7
+	"text is in range 2^52 to 2^53-1 including 20 bits of unicode and 32 bits of colorARGB, but only quote it if they are all same color or maybe all the standard color else have some syntax to say the color of the whole string else display as list of such numbers"
+	(...) //linkedlist with nil at end, like [a [b [c [d []]]]]. Remember every binacyc path leads to [] aka nil.
+	<...> //similar to linkedlist but reversed, like [[[a b] c] d].
+	[...] //list, like [a b c d] aka {0:a, 1:b, 2:3:d}
+	{...} //map, like {a:y, b:x, c:y, d:z}
+	'float[500][700]/sha2_fasdfasfbase64...sfsdf same as param of ? except inlined. This is not a string literal.'
+	<br><br>
+	Function<ob,String> is a view of the highest priority name per ob in a hopfieldNamespace,
+	or null if no names for that ob. A hopfieldNamespace allows multiple names for the same ob,
+	and each name refers to exactly 1 ob. There are no variable names, only names of constants.
+	The hopfield part of it is weights between pairs of {obX:nameA} and {obY:nameB}
+	so which names go with which obs has a statistical context of what other names were used with other obs
+	at the same time. This is needed cuz the same ob can mean different things depending on the caller,
+	even though it does the exact same logic independent of the caller as its a pure lambda func.
+	*/
+	public static void toUfnodeLang(StringBuilder sb, Map o, int recurse, Ns ns, Set<Map> displayed, Map<Map,Integer> counts, boolean allowLog){
+		if(allowLog) lg("o="+o);
+		Integer count = counts.get(o);
+		if(count == null) count = -1; //I saw it be null for a Scalar. They're often part of arrays instead of individually named.
+		//TODO when decide on hex vs base64 etput big branches as hashname and store them somewhere else
+		appendLineThenTabs(sb, recurse);
+		String name = ns.os.get(o);
+		boolean isFirstDisplay = !displayed.contains(o);
+		boolean useOrCreateName = (!isLeafSoSmallDontNameIt(o) && count>1) || name != null;
+		boolean displayContent = isFirstDisplay || !useOrCreateName;
+		if(displayContent){
+			if(useOrCreateName){
+				if(name == null){ //WeakHashMap is doing containsKey(null)==true
+					do{
+						name = Text.newJibberishWord(2e5);
+					}while(ns.so.containsKey(name));
+				}
+				ns.putBidirectionally(name, o);
+			}
+			if(o.size() != 0 && o.scalar() != 0) throw new Error(
+				"FIXME Design changed to every ob has a scalar and is a map of ob to ob. but still need a way to display a nonempty map whose scalar is not 0. For now throw if that happens.");
+			//if(o.isTheImporter()){
+			//	sb.append('?');
+			//}else if(o.isScalar()){
+			}else if(o.size()==0){
+				//FIXME Design changed to every ob has a scalar and is a map of ob to ob. Changing to size()==0,
+				//but still need a way to display a nonempty map whose scalar is not 0. For now throw if that happens.
+				sb.append(doubleToString(o.scalar()));
+			//}else if(o.isString()){
+			//	sb.append(Text.quote(AvlUtil.listOfCharToString(o)));
+			/*}else if(o.isNdim()){
+				//sb.append("TODONDIM");
+				//sb.append(o);
+				if(o instanceof Blob && ((Blob)o).array(c) instanceof char[]){ //string literal
+					String s = new String((char[])((Blob)o).array(c));
+					sb.append(multiLineQuoteWithTabLevel(s,recurse));
+				}else{ //use Ndim arrays
+					sb.append("<ndim>"+o+"</ndim>");
+				}
+			*/
+			}else if(o.isLinkedlist()){ //(a b c d) means [a [b [c [d []]]]]
+				sb.append('(');
+				ob node = o;
+				while(o.size()!=0){
+					toUfnodeLang(sb, o.get0(c), recurse+1, ns, displayed, counts, allowLog);
+					o = o.get1(c);
+				}
+				appendLineThenTabs(sb, recurse);
+				sb.append(')');
+			}else if(o.isDenseList() && o.size()==2){ //<a b c d> means [[[a b] c] d]
+				sb.append('<');
+				appendCurrylist(sb, o, recurse, ns, displayed, counts, allowLog);
+				appendLineThenTabs(sb, recurse);
+				sb.append('>');
+			}else if(o.isDenseList()){ //[a b c d] list is a map whose keys are integers 0 to size()-1
+				sb.append('[');
+				for(int i=0; i<o.size(); i++){
+					ob b = o.get(c,i);
+					toUfnodeLang(sb, b, recurse+1, ns, displayed, counts, allowLog);
+					//if(i != o.size()-1) sb.append(',');
+				}
+				appendLineThenTabs(sb, recurse);
+				sb.append(']');
+			}else{ //display as general map
+				sb.append('{');
+				int i = 0;
+				for(ob k=o.keyMin(c); k!=null; k=o.keyAfter(c,k)){
+					toUfnodeLang(sb, k, recurse+1, ns, displayed, counts, allowLog);
+					ob v = o.get(c,k);
+					sb.append(" :");
+					toUfnodeLang(sb, v, recurse+1, ns, displayed, counts, allowLog);
+					if(i != o.size()-1) sb.append(',');
+					i++;
+				}
+				appendLineThenTabs(sb, recurse);
+				sb.append('}');
+			}
+			//if(o.isLinkedlist()) sb.append('L');
+			//sb.append(o.getClass().getSimpleName());
+			if(useOrCreateName){
+				//sb.append('#').append(name).append("~"+count);
+				sb.append('#').append(name);
+			}
+			displayed.add(o);
+		}else{
+			sb.append(name);
+		}
+		//sb.append("^c"+o.curries(c));
+	}
+	
+	/** recurse is constant along the whole currylist since its for display, despite a currylist being variable depth */
+	static void appendCurrylist(StringBuilder sb, Map o, int recurse, Ns ns, Set<Map> displayed, Map<Map,Integer> counts, boolean allowLog){
+		//ob car = o.get0(c);
+		//ob cdr = o.get1(c);
+		Map car = SlowVM.left(o);
+		Map cdr = SlowVM.right(o);
+		String carName = ns.os.get(car);
+		
+		//FIXME this is firstDisplaying some things expanded but without their name.
+		//Its in the eval of "this is firstDisplaying some things expanded but without their name 2018-1-23-10a.ufnode"
+		
+		if(carName != null && displayed.contains(o)){
+			appendLineThenTabs(sb, recurse+1);
+			sb.append(carName);
+		}else{
+			if(car.size()==2){
+				appendCurrylist(sb,car,recurse, ns, displayed, counts, allowLog);
+			}else{
+				toUfnodeLang(sb, car, recurse+1, ns, displayed, counts, allowLog);
+			}
+		}
+		toUfnodeLang(sb, cdr, recurse+1, ns, displayed, counts, allowLog);
+	}
+	
+	/** Returns a quoted string that starts at left of screen and tabs over to first "
+	and has potentially multiple lines before closing ".
+	forUflangChooseMultilineStringLiteralSyntax: MULITLINEBYTAB. String literals simply allow literal multilines
+	without escaping and do not include the first n tabs which precede the first " as in tabtree way of viewing,
+	but they can be viewed also as quoted on a single line with escapes \n \t etand they dont have \t for
+	those extra viewing tabs.
+	*/
+	public static String multiLineQuoteWithTabLevel(String multiLineQuote, int addTabsPerLine){
+		String[] lines = Text.lines(multiLineQuote);
+		StringBuilder sb = new StringBuilder();
+		boolean first = true;
+		for(String line : lines){
+			for(int i=0; i<addTabsPerLine; i++) sb.append('\t');
+			if(first) sb.append("\"");
+			else sb.append(Text.n);
+			sb.append(line.replace("\\", "\\\\").replace("\"","\\\"")); //FIXME may be bugs in order of these or missing some
+			first = false;
+		}
+		sb.append("\"");
+		return sb.toString().trim();
+	}
+
+	/* This is from before ob, instead using Map, List, etc.
+	public static void toUflang(cx StringBuilder sb, ob acyclicNet, int recurse){
+		appendLineThenTabs(sb, recurse);
+		//if(acyclicNet == nullObject || acyclicNet == null){
+		//	sb.append("null");
+		//	return;
+		//}
+		Class t = acyclicNet.getClass();
+		"ERROR, since its not Map, List, etthese if conditions wont match. Check if its map or list with ob funcs like isDenseList."
+		if(listType.isAssignableFrom(t)){
+			sb.append('[');
+			//List<Object> list = (List<Object>) acyclicNet;
+			ob list = acyclicNet;
+			for(int i=0; i<list.size(); i++){
+				ob o = list.get(c,i);
+				toUflang(sb, o, recurse+1);
+				if(i != list.size()-1) sb.append(',');
+			}
+			appendLineThenTabs(sb, recurse);
+			sb.append(']');
+		}else if(mapType.isAssignableFrom(t)){
+			sb.append('{');
+			NavigableMap<Object,Object> map = (NavigableMap<Object,Object>) acyclicNet;
+			int i = 0;
+			
+			
+			for(Object key : map.keySet()){
+				Object value = map.get(key);
+				toUflang(sb, key, recurse+1);
+				sb.append(" :");
+				toUflang(sb, value, recurse+1);
+				if(i != map.size()-1) sb.append(',');
+				i++;
+			}
+			//for(Object key : map.keySet()){
+			//	Object value = map.get(key);
+			//	toUflang(sb, key, recurse+1);
+			//	sb.append(" :");
+			//	toUflang(sb, value, recurse+1);
+			//	if(i != map.size()-1) sb.append(',');
+			//	i++;
+			//}
+			
+			
+			appendLineThenTabs(sb, recurse);
+			sb.append('}');
+		}else if(StringType.isAssignableFrom(t)){
+			sb.append(escape((String)acyclicNet));
+		}else if(scalarType.isAssignableFrom(t)){
+			sb.append(doubleToString((double)acyclicNet));
+		}else if(t == double[].class){
+			double a[] = (double[])acyclicNet;
+			sb.append('[');
+			for(int i=0; i<a.length; i++){
+				sb.append(doubleToString(a[i]));
+				if(i != a.length-1) sb.append(',');
+			}
+			sb.append(']');
+		//}else if(longType.isAssignableFrom(t)){
+		//	sb.append((long)acyclicNet);
+		//}else if(acyclicNet.equals(true)){
+		//	sb.append("true");
+		//}else if(acyclicNet.equals(false)){
+		//	sb.append("false");
+		}else{
+			throw new Error("Object type not recognized: "+acyclicNet);
+		}
+	}*/
+
+	public static void appendLineThenTabs(StringBuilder sb, int tabs){
+		sb.append(n);
+		for(int i=0; i<tabs; i++) sb.append('\t');
+	}
+	
+	/** Not the optimization I was looking for in computing time, but at least it makes List<Double> garbcolable */
+	public static double[] listToArrayOfDoubles_todoOptimizeByNotCreatingList(List list){
+		int siz = list.size();
+		double a[] = new double[siz];
+		for(int i=0; i<siz; i++) a[i] = (Double)list.get(i);
+		return a;
+	}
+	
+	public static float[] listOfDoublesToArrayOfFloats_todoOptimizeByNotCreatingList(List list){
+		int siz = list.size();
+		float a[] = new float[siz];
+		for(int i=0; i<siz; i++) a[i] = (float)(double)list.get(i);
+		return a;
+	}
+	
+	/** Sets a path to a value. Return and params are NavigableMap, List, and other jsonDS types.
+	Params start with any such object.
+	Then a path from it (all except first and last param).
+	Then a value to set.
+	If there are only 2 params, by that logireturns last param.
+	If there are 3 params x y z, returns x with key y set to z.
+	<br><br>
+	When path doesnt exist, has to choose types to create:
+	Only float[] (TODO or more dimensions) can contain value of Float.
+	NavigableMaps take keys as String or Double.
+	Lists take keys as Integer
+	<br><br>
+	For immutable NavigableMaps, Lists, etneed a way to set data in them.
+	Technically this may contain float[] and maybe double[],
+	which cant be immutable but caller can still use them that way.
+	<br><br>
+	If param "in" is null, creates a NavigableMap, List, or float[] by first in pathAndValue,
+	if pathAndValue size is at least 2 (cuz else would be just the value).
+	*/ 
+	public static <T> T jsonSet(T in, Object... pathAndValue){
+		if(pathAndValue.length < 1) throw new RuntimeException("No value");
+		if(pathAndValue.length == 1) return (T) pathAndValue[0];
+		if(in == null){
+			if(pathAndValue[0] instanceof String || pathAndValue[0] instanceof Double){
+				in = (T) new TreeMap(SlowVMParser.mapKeyComparator);
+			}else if(pathAndValue[0] instanceof Integer){
+				int i = (Integer)pathAndValue[0];
+				if(pathAndValue.length == 2 && pathAndValue[1] instanceof Float){
+					//Very inefficient to replace float[] every time 1 bigger,
+					//so caller would probably create the float[].
+					in = (T) new float[1];
+				}else{
+					in = (T) new ArrayList();
+				}
+			}else{
+				throw new RuntimeException(
+					"Dont know what type to create for in=null and pathAndValue="+Arrays.asList(pathAndValue));
+			}
+		}
+		if(in instanceof NavigableMap){
+			Object child = ((NavigableMap)in).get(pathAndValue[0]); //if null, newChild creates by param types
+			Object newChild = jsonSet(child, newArrayWithFirstRemoved(pathAndValue));
+			NavigableMap newMap = new TreeMap(SlowVMParser.mapKeyComparator);
+			newMap.putAll((NavigableMap)in);
+			newMap.put(pathAndValue[0], newChild);
+			return (T) Collections.unmodifiableNavigableMap(newMap);
+		}else if(in instanceof List){
+			int index = (Integer)pathAndValue[0];
+			Object newChild;
+			boolean append = index == ((List)in).size();
+			if(append){
+				newChild = jsonSet(null, newArrayWithFirstRemoved(pathAndValue)); //replace Null by first type in path
+			}else{
+				Object child = ((List)in).get(index);
+				newChild = jsonSet(child, newArrayWithFirstRemoved(pathAndValue));
+			}
+			List newList = new ArrayList((List)in);
+			if(append) newList.add(newChild);
+			else newList.set(index,newChild);
+			return (T) Collections.unmodifiableList(newList);
+		}else if(in instanceof float[]){
+			if(pathAndValue.length == 2){
+				float[] out = ((float[])in).clone();
+				out[(Integer)pathAndValue[0]] = ((Number)pathAndValue[1]).floatValue();
+				return (T) out;
+			}
+			throw new RuntimeException("Path ended early when got float[], in="+in
+				+" and pathAndValue="+Arrays.asList(pathAndValue));
+		}else{
+			throw new RuntimeException("Unknown type: "+in.getClass());
+		}
+	}
+	
+	/** Gets else null. See jsonset(Object...) */
+	public static Object jsonGet(Object in, Object... path){
+		Object o = in;
+		for(int i=0; i<path.length; i++){
+			if(o instanceof NavigableMap){
+				o = ((NavigableMap)o).get(path[i]); //null if not found
+			}else if(o instanceof List){
+				int listIndex = (Integer)path[i];
+				if(0 <= listIndex && listIndex < ((List)o).size()){
+					o = ((List)o).get(listIndex);
+				}else{
+					return null; //viewing List as Map of int to value
+				}
+			}else if(o instanceof float[]){
+				//FIXME what if its float[][] or more?
+				//Rbm uses float[][][] weights, but probably that wouldnt be stored in json.
+				if(i != path.length-1) throw new RuntimeException("Got float array before path ended");
+				int arrayIndex = (Integer)path[i];
+				if(0 <= arrayIndex && arrayIndex < ((float[])o).length){
+					o = ((float[])o)[arrayIndex];
+				}else{
+					return null; //viewing float[] as Map of int to float
+				}
+			}
+		}
+		return o;
+	}
+	
+	/** Size of NavigableMap or List or float[], else 1 if String or Double */
+	public static int jsonSize(Object in, Object... path){
+		Object o = jsonGet(in,path);
+		if(o instanceof Collection) return ((Collection)o).size();
+		if(o instanceof float[]) return ((float[])o).length;
+		if(o instanceof String || o instanceof Double) return 1;
+		throw new RuntimeException("Unknown type: "+o.getClass());
+	}
+	
+	public static Object[] newArrayWithFirstRemoved(Object... a){
+		Object[] b = new Object[a.length-1];
+		System.arraycopy(a, 1, b, 0, b.length);
+		return b;
+	}
+	
+	public static String jsonToSingleLine(String json){
+		return json.replaceAll("(\\r|\\n|\\r\\n)\\t*", "");
+	}
+	
+}
+
