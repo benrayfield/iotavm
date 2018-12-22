@@ -1,4 +1,7 @@
 #iotavm
+
+(INCOMPLETE) pure functions that always halt in at most depth of datastruct forest, debugger steps, reflection, weakEquals, binary forest dedup, hookable into optimization such as intheory opencl and int as complete binary tree of leafs car and cdr
+
 I'm still in the formal-verification steps of the software, in which I recently derived lisp's cons car and cdr similar to in unlambda, and after somme more of that kind of stuff, up to deriving AVL treemap, I'll put in optimizations for int32, int64, opencl, music tools that fit in a constant memory size, etc. Here's some output...
 
 
