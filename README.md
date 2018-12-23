@@ -2,6 +2,9 @@
 
 (INCOMPLETE) pure functions that always halt in at most depth of datastruct forest, debugger steps, reflection, weakEquals, binary forest dedup, hookable into optimization such as intheory opencl and int as complete binary tree of leafs car and cdr
 
+There will be a lisplike programming language or optionally you can build and use functions by drag-and-drop, since every function takes 1 function as param and returns 1 function. Even int32 and int64 will be functions made of cons functions with 2 curried params (3 curries calls param on first then calls second on what that returns) forming a complete binary tree of bits each bit as car or cdr, optimized to only store the int32 or int64, and a few other optimizations. Early prototype of drag-and-drop window, which starts with just a few leaf nodes on screen from which you build the functions seen...
+<img src=https://raw.githubusercontent.com/benrayfield/iotavm/master/website/pics/IotaVM_0.1.png>
+
 I'm still in the formal-verification steps of the software, in which I recently derived lisp's cons car and cdr similar to in unlambda, and after some more of that kind of stuff, up to deriving AVL treemap, I'll put in optimizations for int32, int64, opencl, music tools that fit in a constant memory size (binufnodeAcyclicFlowMusicOptimization), etc. Here's some output from SlowVM.java, which is slow cuz of its use of java.util.Map and deduping everything and is not nearly as fast as it will be with bit masks and other optimizations...
 
 FIXME got car and revcar mixed up some places, and same for cdr and revcdr, in the comments, but the code works as seen in the testcases...
