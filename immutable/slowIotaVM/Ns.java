@@ -1,5 +1,5 @@
 /** Ben F Rayfield offers this software opensource MIT license */
-package immutable.slowIotaAndorBinufnodeVMJustToFindTheRightImmutableForestLogicToOptimize;
+package immutable.slowIotaVM;
 import java.lang.ref.WeakReference;
 import java.util.Map;
 import java.util.WeakHashMap;

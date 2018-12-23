@@ -1,5 +1,5 @@
 /** Ben F Rayfield offers this software opensource MIT license */
-package immutable.iotavm;
+package immutable.iotaVM;
 
 /** The main core op is [iota=Lf.f(La.Lb.Lc.ac(bc))(Ld.Le.d)=Lf.fSK].
 Since lambda funcs lack the ability to look at the sourceCode of lambda funcs without calling them,

@@ -1,5 +1,5 @@
 /** Ben F Rayfield offers this software opensource MIT license */
-package immutable.iotavm;
+package immutable.iotaVM;
 
 /** These are part of (long)Funcall.dataAndOrId data format which is not part of the iotavm spec.
 The iotavm spec is defined only by the Leaf constants and all possible binary forests of them

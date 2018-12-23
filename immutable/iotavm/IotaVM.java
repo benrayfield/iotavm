@@ -1,5 +1,5 @@
 /** Ben F Rayfield offers this software opensource MIT license */
-package immutable.iotavm;
+package immutable.iotaVM;
 
 /** An immutable forkEditable merkleAble binary forest where every leaf is one of (enum)Leaf,
 and the only allowed op is to call one func on another func which returns a func,

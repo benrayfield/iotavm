@@ -1,5 +1,5 @@
 /** Ben F Rayfield offers this software opensource MIT license */
-package immutable.iotavm;
+package immutable.iotaVM;
 
 /** dense sharable subarrayable array of a powOf2 number of bits, OR NULL.
 If nonnull, represents a complete binary tree with car and cdr as leafs,

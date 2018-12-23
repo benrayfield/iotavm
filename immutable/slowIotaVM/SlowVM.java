@@ -1,5 +1,5 @@
 /** Ben F Rayfield offers this software opensource MIT license */
-package immutable.slowIotaAndorBinufnodeVMJustToFindTheRightImmutableForestLogicToOptimize;
+package immutable.slowIotaVM;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
+import immutable.iotaVM.Optimize;
 import immutable.util.HashUtil;
 import immutable.util.Text;
 
@@ -56,6 +57,32 @@ middle ground between iotavm and binufnode.
 public class SlowVM{
 	private SlowVM(){}
 	
+	/*
+	//public static final Map reflect;
+	Replace reflect with L and R (both are leafs) since everything, even leafs,
+	has a deterministic left/func and right/param.
+	left/param of a leaf is {I I}=identityFunc.
+	right/param of a leaf is itself (that leaf).
+	L and R are better than reflect cuz it doesnt depend
+	on cons which is a more complex structure. Its easier to optimize.
+	WARNING: the middleground between iotavm and ``curry
+	(in binufnode which can curry a nsForkEdit)
+	may conflict with reflect andOr L and R.
+	Maybe call them F and P (func and param) instead of L and R?
+	...
+	Also bring in most or all of the other leaf type in iotaVM.Leaf,
+	especially those about isRet, dedup, weakEquals, etc.
+	...
+	After that find the middleground between iotavm and ``curry
+	and use it to build AVL treemap to curry nsForkEdit.
+	...
+	After those leaf types are working in iotadesktop,
+	next big task is use them to test iotavm (as slowvm Maps for now)
+	especially the tests, some of which fail, in SlowVM.main(String[]),
+	then after thats working, start optimizing and hooking into more systems
+	to do something fun.
+	*/
+	
 	public static final Map<String,Map> hashToOb = new HashMap();
 	
 	public static final Map<String,String> hashToName = new HashMap();
@@ -70,7 +97,16 @@ public class SlowVM{
 		Arrays.sort(keys);
 		StringBuilder sb = new StringBuilder();
 		for(String key : keys){
-			if(!key.equals("this")){
+			if(!key.equals("this") && !key.equals("isRet") && !key.equals("name")){
+				
+				//name is local prehopfieldName and must not affect global hashname.
+				//Only constants have names.
+				//There are no variable names cuz there are no variables.
+				//The appearance of mutable variables will be done by
+				//statelessly/immutably deriving forkEditable AVL treemap
+				//of string to object and currying that in some of the funcs which
+				//forkEdit new key/value pairs in and give that to recursions etc.
+				
 				Object value = m.get(key);
 				//if(value instanceof Map) value = hash((Map)value); //exponentially slow, it appears, cuz repeats calculations
 				if(value instanceof Map) value = dedup((Map)value); //fast
@@ -164,6 +200,16 @@ public class SlowVM{
 		return dedup(m);
 	}
 	
+	/** Example: {a b c d} means {{{a b} c} d}. Unlike (a b c d) means {a {b {c {d nil}}}. */
+	public static Map pairs(Map... obs){
+		if(obs.length == 0) throw new Error("empty");
+		Map ret = obs[0];
+		for(int i=1; i<obs.length; i++){
+			ret = pair(ret,obs[i]);
+		}
+		return ret;
+	}
+	
 	public static boolean isLeaf(Map m){
 		return m.containsKey("leafType");
 	}
@@ -205,6 +251,16 @@ public class SlowVM{
 		long end = System.nanoTime();
 		double duration = (end-start)*1e-9;
 		lg("evalOrCrash returned. duration="+duration);
+		return m;
+	}
+	
+	/** returns null if not return in that many evalSteps */
+	public static Map evalLimitSteps(Map m, int maxCycles){
+		while(!isRet(m) && maxCycles-- > 0){
+			m = evalStep(m);
+			lg("evalOrCrash step "+toString(m));
+		}
+		if(maxCycles == 0) return null;
 		return m;
 	}
 	
@@ -284,10 +340,12 @@ public class SlowVM{
 		if(LL == iota && LR == iota){ //((iota iota) x)
 			return false; //evalStep would return x
 		}
-		Map LLL = left(LL);	
+		Map LLL = left(LL);
 		if(L == iota){ //(iota x)
 			if(R == iota){
 				return true; //FIXME? This isnt completely consistent?? but since i={I I} is part of the core logic I dont know any other way to do it?
+			}else if(left(R) == iota && right(R) == iota){
+				return true; //{I {I I}} FIXME this isnt completely consistent, but its part of core controlflow, like {I I} is.
 			}else{
 				return false; //evalStep would return ((xs)k)
 			}
@@ -301,22 +359,27 @@ public class SlowVM{
 		return true;
 	}
 	
-	static final Map iota;
-	
-	static final Map reflect;
-	
+	public static final Map iota;
 	
 	//FIXME identityFunc is being called by left by shouldBeRet by pair by clinit.
 	
-	static final Map identityFunc;
+	public static final Map reflect;
 	
-	static final Map k;
+	public static final Map reflectL;
 	
-	static final Map s;
+	public static final Map reflectR;
+	
+	public static final Map identityFunc;
+	
+	public static final Map k;
+	
+	public static final Map s;
 	
 	static{
 		iota = leaf("iota");
 		reflect = leaf("reflect");
+		reflectL = leaf("reflectL");
+		reflectR = leaf("reflectR");
 		identityFunc = bootPair(iota,iota);
 		k = bootPair(iota,bootPair(iota,identityFunc));
 		s = bootPair(iota,k);
@@ -439,11 +502,15 @@ public class SlowVM{
 		lg("This is (TODO incomplete) a formal-verification of the logic I plan to optimize in iotavm andOr binufnode (some middle ground between them using ``curry where nsForkEdit is sometimes one of the curried params to forkEdit recursively).");
 		lg("");
 		
-		lg("TODO derive cons car cdr s k funcs.");
-		lg("TODO evalStep func will change Sxyz to ((xz)(yz)) lazyeval !isRet, and change Kxy to x, and change (iota x) to ((xs)k) and FIRST will recurse through all lazyevals (!isRet) until find first isRet, first into left recursively then into right recursively, just doing 1 tiny piece of work per evalStep then pairing back up to where it was called from.");
+		lg("FIXME got car and revcar mixed up some places, and same for cdr and revcdr, in the comments, but the code works as seen in the testcases...");
+		
+		//done, I think: lg("TODO derive cons car cdr s k funcs.");
+		//done, I think: lg("TODO evalStep func will change Sxyz to ((xz)(yz)) lazyeval !isRet, and change Kxy to x, and change (iota x) to ((xs)k) and FIRST will recurse through all lazyevals (!isRet) until find first isRet, first into left recursively then into right recursively, just doing 1 tiny piece of work per evalStep then pairing back up to where it was called from.");
 		
 		lg("reflect="+hash(reflect));
 		lg("reflect="+toString(reflect));
+		
+		
 		
 		Map otherIdentityFunc = pair(pair(s,k),k);
 		lg("otherIdentityFunc="+hash(otherIdentityFunc));
@@ -496,6 +563,8 @@ public class SlowVM{
 		testIsRet(c("I"),true);
 		testIsRet(c("i"),true); //same as {I I}
 		testIsRet(c("{I I}"),true); //same as i
+		
+		testIsRet(c("{I {I I}}"),true);
 		
 		//FIXME? testIsRet(c("{I {I I}}"),true); or should that be false? 
 		testIsRet(c("k"),true);
@@ -631,6 +700,75 @@ public class SlowVM{
 		Map eval_cdr_cons_k_reflect = evalOrCrash(cdr_cons_k_reflect);
 		if(eval_cdr_cons_k_reflect != reflect) throw new Error("eval_cdr_cons_k_reflect != reflect");
 		
+		Map cons_reflect_k = pair(pair(cons,reflect),k);
+		if(isRet(cons_reflect_k)) throw new Error("isRet cons_reflect_k");
+		
+		if(isRet(cons_k_reflect)) throw new Error("isRet cons_k_reflect");
+		
+		Map cons_k_k = pair(pair(cons,k),k);
+		if(isRet(cons_k_k)) throw new Error("isRet cons_k_k");
+		
+		Map cons_reflect_reflect = pair(pair(cons,reflect),reflect);
+		if(isRet(cons_reflect_reflect)) throw new Error("isRet cons_reflect_reflect");
+		
+		Map cons_Push_cons_k_reflect_Pop_Push_reflect_Pop =
+			pair(pair(cons,cons_k_reflect),reflect);
+		Map eval_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop = evalOrCrash(cons_Push_cons_k_reflect_Pop_Push_reflect_Pop);
+		
+		//In optimized forms of this software, would not always eval the cons even though its a lazyEval
+		//cuz would have optimizations to use it with car and cdr,
+		//but would eval it in other combos that should happen rarely.
+		
+		Map cdr_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop =
+			pair(cdr,cons_Push_cons_k_reflect_Pop_Push_reflect_Pop);
+		Map eval_cdr_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop =
+			evalOrCrash(cdr_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop);
+		if(eval_cdr_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop != reflect) throw new Error(
+			"eval_cdr_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop != reflect");
+	
+		Map car_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop =
+			pair(car,cons_Push_cons_k_reflect_Pop_Push_reflect_Pop);
+		Map eval_car_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop =
+			evalOrCrash(car_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop);
+		Map eval_cons_k_reflect = evalOrCrash(cons_k_reflect);
+		if(eval_car_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop != eval_cons_k_reflect) throw new Error(
+			"eval_car_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop != eval_cons_k_reflect");
+		
+		putNameOb("car", car);		
+		putNameOb("cdr", cdr);
+		//TODO only allow local names of constants, never variable names. prehopfieldNamespace.
+		
+		Map car_car_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop =
+			pair(car,pair(car,cons_Push_cons_k_reflect_Pop_Push_reflect_Pop));
+		Map eval_car_car_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop =
+			evalOrCrash(car_car_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop);
+		if(eval_car_car_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop != k) throw new Error(
+			"eval_car_car_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop != k");
+		
+		//TODO make a func to call 2 hops into car of car.
+		Map carOfCarOfParam = pairs(s, car, pairs(s, car, identityFunc));
+		lg("carOfCarOfParam = "+toString(carOfCarOfParam));
+		
+		Map indirectCar = pairs(s, car, identityFunc);
+		lg("indirectCar = "+toString(indirectCar));
+		
+		Map indirectCar_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop =
+			pair(indirectCar,cons_Push_cons_k_reflect_Pop_Push_reflect_Pop);
+		Map eval_indirectCar_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop =
+			evalOrCrash(indirectCar_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop);
+		if(eval_indirectCar_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop != eval_cons_k_reflect) throw new Error(
+			"eval_indirectCar_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop != eval_cons_k_reflect");
+		//FIXME why different result for [indirectCar vs car]_Push_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop_Pop ?
+		
+		
+		/*Map carOfCdrOfParam_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop =
+			pair(carOfCarOfParam,cons_Push_cons_k_reflect_Pop_Push_reflect_Pop);
+		Map eval_carOfCdrOfParam_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop =
+			evalOrCrash(carOfCdrOfParam_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop);
+		if(eval_carOfCdrOfParam_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop != k) throw new Error(
+			"eval_carOfCdrOfParam_cons_Push_cons_k_reflect_Pop_Push_reflect_Pop != k");
+		*/
+		
 		//revcar and car are eachothers counterpart, depending if you want the cons before or after.
 		//revcdr and cdr are eachothers counterpart, depending if you want the cons before or after.
 		//It works.
@@ -638,15 +776,18 @@ public class SlowVM{
 		//This software is derived from https://en.wikipedia.org/wiki/SKI_combinator_calculus
 		//but not from those few statements of fact on the unlambda webpage.
 		//This software differs from unlambda in being completely stateless and optimizations.
-		
+		//Its also similar in some ways to LazyK which is another SKI calculus software.
 		
 		lg("TODO After get cons car cdr and AVL treemap working in iota, consider simplifying it maybe with s0<> s1<x> s2<x,y> k0<> k1<x> etc, without the need for iota whose only purpose is to get the s and k out of. Since there are other leafs, such as R is reflect to get {{cons itsCar} itsCdr}, and such as dedup and leafEquals, its not too far of a stretch to have those 5 s and k controlflow operators.");
+		
+		lg("TODO iotavm emulates its own stack, using cons to make an efficiently forkEditable linkedlist"
+			+" alternating node and car or cdr to say which direction it recursed, and calls evalStep there which will take constant depth on average.");
+		
+		lg("TODO dont recurse into every lazyeval if some would trivially be skipped by k.");
 		
 		lg("TODO Have to get SlowVM working before optimizations,"
 			+" including Blob (powOf2 size binheap indexed bitstring, and acyclicFlow music optimization,"
 			+" and opencl optimization of matrix multiply etc.");
-		
-		lg("TODO find some middle ground between iota and binufnode that does ``curry efficiently using a few extra leaf types, then derive AVL treemap and use it to emulate nsForkEdit as just another curry in some funcs passed recursively and forkEdited.");
 		
 		lg("TODO find some middle ground between iota and binufnode that does ``curry efficiently using a few extra leaf types, then derive AVL treemap and use it to emulate nsForkEdit as just another curry in some funcs passed recursively and forkEdited.");
 		

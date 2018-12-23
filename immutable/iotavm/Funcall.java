@@ -1,7 +1,7 @@
 /** Ben F Rayfield offers this software opensource MIT license */
-package immutable.iotavm;
-import static immutable.iotavm.Leaf.*;
-import static immutable.iotavm.Optimize.*;
+package immutable.iotaVM;
+import static immutable.iotaVM.Leaf.*;
+import static immutable.iotaVM.Optimize.*;
 
 import java.util.logging.Level;
 
